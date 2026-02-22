@@ -2,6 +2,7 @@
 import os
 import sys
 import tempfile
+import shutil
 import requests
 from colorthief import ColorThief
 from PIL import Image
@@ -123,7 +124,6 @@ class ColorExtractor:
             print(f"Updated {palette_path}")
 
     def cleanup(self):
-        import shutil
         shutil.rmtree(self.temp_dir)
 
 if __name__ == "__main__":

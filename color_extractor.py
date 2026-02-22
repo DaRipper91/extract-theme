@@ -2,13 +2,16 @@
 import os
 import sys
 import tempfile
+import argparse
 import requests
 from colorthief import ColorThief
 from PIL import Image
 
 class ColorExtractor:
-    def __init__(self, input_source):
+    def __init__(self, input_source, output_dir=None, palette_path=None):
         self.input_source = input_source
+        self.output_dir = os.path.expanduser(output_dir or "~/ops/color-tools/output")
+        self.palette_path = os.path.expanduser(palette_path or "~/Colors/vibrant_palette.md")
         self.temp_dir = tempfile.mkdtemp()
         self.image_path = None
         self.palette = []
@@ -63,11 +66,10 @@ class ColorExtractor:
             # Fallback if too few colors
             colors_16 = (colors_16 * 2)[:16]
 
-        output_dir = os.path.expanduser("~/ops/color-tools/output")
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
 
         # 1. Alacritty
-        alacritty_path = os.path.join(output_dir, "alacritty_theme.toml")
+        alacritty_path = os.path.join(self.output_dir, "alacritty_theme.toml")
         with open(alacritty_path, 'w') as f:
             f.write("[colors.primary]\n")
             f.write(f'background = "{self.get_hex_0x(bg)}"\n')
@@ -84,7 +86,7 @@ class ColorExtractor:
         print(f"Generated Alacritty theme: {alacritty_path}")
 
         # 2. Konsole
-        konsole_path = os.path.join(output_dir, "extracted.colorscheme")
+        konsole_path = os.path.join(self.output_dir, "extracted.colorscheme")
         with open(konsole_path, 'w') as f:
             f.write("[Background]\n")
             f.write(f"Color={self.get_rgb_str(bg)}\n")
@@ -97,7 +99,7 @@ class ColorExtractor:
         print(f"Generated Konsole colorscheme: {konsole_path}")
 
         # 3. Starship
-        starship_path = os.path.join(output_dir, "starship_palette.toml")
+        starship_path = os.path.join(self.output_dir, "starship_palette.toml")
         with open(starship_path, 'w') as f:
             f.write("[palettes.extracted]\n")
             f.write(f'bg = "#{bg[0]:02x}{bg[1]:02x}{bg[2]:02x}"\n')
@@ -107,35 +109,47 @@ class ColorExtractor:
         print(f"Generated Starship palette: {starship_path}")
 
         print("\n--- Usage Tips ---")
-        print("Alacritty: Add 'import = [\"~/ops/color-tools/output/alacritty_theme.toml\"]' to your alacritty.toml")
-        print("Konsole: Copy 'extracted.colorscheme' to ~/.local/share/konsole/")
-        print("Starship: Add 'palette = \"extracted\"' and import 'starship_palette.toml' to your starship.toml")
+        print(f"Alacritty: Add 'import = [\"{alacritty_path}\"]' to your alacritty.toml")
+        print(f"Konsole: Copy 'extracted.colorscheme' (from {self.output_dir}) to ~/.local/share/konsole/")
+        print(f"Starship: Add 'palette = \"extracted\"' and import '{starship_path}' to your starship.toml")
 
     def update_vibrant_palette(self):
-        palette_path = os.path.expanduser("~/Colors/vibrant_palette.md")
-        if os.path.exists(palette_path):
-            with open(palette_path, 'a') as f:
+        if os.path.exists(self.palette_path):
+            with open(self.palette_path, 'a') as f:
                 f.write(f"\n## Extracted from {os.path.basename(self.input_source)}\n")
                 f.write(f"- **Background**: `#{self.palette[0][0]:02x}{self.palette[0][1]:02x}{self.palette[0][2]:02x}`\n")
                 f.write(f"- **Foreground**: `#{self.palette[-1][0]:02x}{self.palette[-1][1]:02x}{self.palette[-1][2]:02x}`\n")
                 for i, c in enumerate(self.palette[1:9]): # Just show a few
                     f.write(f"- **Color {i}**: `#{c[0]:02x}{c[1]:02x}{c[2]:02x}`\n")
-            print(f"Updated {palette_path}")
+            print(f"Updated {self.palette_path}")
 
     def cleanup(self):
         import shutil
         shutil.rmtree(self.temp_dir)
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: color_extractor.py <image_path_or_url>")
-        sys.exit(1)
+def main():
+    parser = argparse.ArgumentParser(description="Extract terminal color schemes from an image or URL.")
+    parser.add_argument("input", help="Path to local image or URL")
+    parser.add_argument("--output-dir", "-o",
+                        default="~/ops/color-tools/output",
+                        help="Directory to save generated configs (default: %(default)s)")
+    parser.add_argument("--palette-file", "-p",
+                        default="~/Colors/vibrant_palette.md",
+                        help="Path to vibrant_palette.md (default: %(default)s)")
+    parser.add_argument("--no-update", action="store_true",
+                        help="Don't update the vibrant palette file")
+
+    args = parser.parse_args()
     
-    extractor = ColorExtractor(sys.argv[1])
+    extractor = ColorExtractor(args.input, output_dir=args.output_dir, palette_path=args.palette_file)
     try:
         extractor.prepare_image()
         extractor.extract_colors()
         extractor.generate_configs()
-        extractor.update_vibrant_palette()
+        if not args.no_update:
+            extractor.update_vibrant_palette()
     finally:
         extractor.cleanup()
+
+if __name__ == "__main__":
+    main()

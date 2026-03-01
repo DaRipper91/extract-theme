@@ -2,6 +2,7 @@
 import os
 import sys
 import tempfile
+import shutil
 import requests
 import shutil
 from colorthief import ColorThief
